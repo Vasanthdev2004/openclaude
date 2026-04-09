@@ -96,6 +96,12 @@ export function AutoUpdater({
       // Skip update for development builds
       if (installationType === 'development') {
         logForDebugging('AutoUpdater: Cannot auto-update development build');
+        onAutoUpdaterResult({
+          version: latestVersion,
+          currentVersion,
+          status: 'update_available',
+          actionLabel: 'claude update'
+        });
         onChangeIsUpdating(false);
         return;
       }
@@ -187,6 +193,9 @@ export function AutoUpdater({
         </> : autoUpdaterResult?.status === 'success' && showSuccessMessage && updateSemver && <Text color="success" wrap="truncate">
             ✓ Update installed · Restart to apply
           </Text>}
+      {autoUpdaterResult?.status === 'update_available' && autoUpdaterResult.version && autoUpdaterResult.currentVersion && <Text color="warning" wrap="truncate">
+          Update available: {autoUpdaterResult.currentVersion} → {autoUpdaterResult.version} &middot; Run <Text bold>{autoUpdaterResult.actionLabel ?? 'claude update'}</Text>
+        </Text>}
       {(autoUpdaterResult?.status === 'install_failed' || autoUpdaterResult?.status === 'no_permissions') && <Text color="error" wrap="truncate">
           ✗ Auto-update failed &middot; Try <Text bold>claude doctor</Text> or{' '}
           <Text bold>

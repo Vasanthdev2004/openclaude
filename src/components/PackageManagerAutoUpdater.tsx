@@ -20,7 +20,9 @@ type Props = {
 export function PackageManagerAutoUpdater(t0) {
   const $ = _c(10);
   const {
-    verbose
+    verbose,
+    onAutoUpdaterResult,
+    autoUpdaterResult
   } = t0;
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [packageManager, setPackageManager] = useState("unknown");
@@ -48,6 +50,18 @@ export function PackageManagerAutoUpdater(t0) {
       setUpdateAvailable(!!hasUpdate);
       if (hasUpdate) {
         logForDebugging(`PackageManagerAutoUpdater: Update available ${MACRO.VERSION} -> ${latest}`);
+        onAutoUpdaterResult({
+          version: latest,
+          currentVersion: MACRO.VERSION,
+          status: 'update_available',
+          actionLabel: pm === 'homebrew' ? 'brew upgrade claude-code' : pm === 'winget' ? 'winget upgrade Anthropic.ClaudeCode' : pm === 'apk' ? 'apk upgrade claude-code' : 'your package manager update command'
+        });
+      } else if (autoUpdaterResult?.status === 'update_available') {
+        onAutoUpdaterResult({
+          version: latest,
+          currentVersion: MACRO.VERSION,
+          status: 'up_to_date'
+        });
       }
     };
     $[0] = t1;
@@ -70,10 +84,10 @@ export function PackageManagerAutoUpdater(t0) {
   }
   React.useEffect(t2, t3);
   useInterval(checkForUpdates, 1800000);
-  if (!updateAvailable) {
+  if (!updateAvailable && autoUpdaterResult?.status !== 'update_available') {
     return null;
   }
-  const updateCommand = packageManager === "homebrew" ? "brew upgrade claude-code" : packageManager === "winget" ? "winget upgrade Anthropic.ClaudeCode" : packageManager === "apk" ? "apk upgrade claude-code" : "your package manager update command";
+  const updateCommand = (autoUpdaterResult?.status === 'update_available' && autoUpdaterResult.actionLabel) || (packageManager === "homebrew" ? "brew upgrade claude-code" : packageManager === "winget" ? "winget upgrade Anthropic.ClaudeCode" : packageManager === "apk" ? "apk upgrade claude-code" : "your package manager update command");
   let t4;
   if ($[3] !== verbose) {
     t4 = verbose && <Text dimColor={true} wrap="truncate">currentVersion: {MACRO.VERSION}</Text>;
@@ -84,7 +98,7 @@ export function PackageManagerAutoUpdater(t0) {
   }
   let t5;
   if ($[5] !== updateCommand) {
-    t5 = <Text color="warning" wrap="truncate">Update available! Run: <Text bold={true}>{updateCommand}</Text></Text>;
+    t5 = <Text color="warning" wrap="truncate">Update available{autoUpdaterResult?.currentVersion && autoUpdaterResult?.version ? `: ${autoUpdaterResult.currentVersion} → ${autoUpdaterResult.version}` : '!'} Run: <Text bold={true}>{updateCommand}</Text></Text>;
     $[5] = updateCommand;
     $[6] = t5;
   } else {
