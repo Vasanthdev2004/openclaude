@@ -54,7 +54,7 @@ export function PackageManagerAutoUpdater(t0) {
           version: latest,
           currentVersion: MACRO.VERSION,
           status: 'update_available',
-          actionLabel: `npm install -g ${MACRO.PACKAGE_URL}@latest`
+          actionLabel: 'Use your package manager to update OpenClaude'
         });
       } else if (autoUpdaterResult?.status === 'update_available') {
         onAutoUpdaterResult({
@@ -87,7 +87,7 @@ export function PackageManagerAutoUpdater(t0) {
   if (!updateAvailable && autoUpdaterResult?.status !== 'update_available') {
     return null;
   }
-  const updateCommand = (autoUpdaterResult?.status === 'update_available' && autoUpdaterResult.actionLabel) || `npm install -g ${MACRO.PACKAGE_URL}@latest`;
+  const updateCommand = (autoUpdaterResult?.status === 'update_available' && autoUpdaterResult.actionLabel) || 'Use your package manager to update OpenClaude';
   let t4;
   if ($[3] !== verbose) {
     t4 = verbose && <Text dimColor={true} wrap="truncate">currentVersion: {MACRO.VERSION}</Text>;
