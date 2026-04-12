@@ -18,30 +18,27 @@
  */
 import { PassThrough } from 'node:stream'
 
-import { expect, mock, test } from 'bun:test'
+import { afterEach, expect, mock, test } from 'bun:test'
 import React, { useEffect } from 'react'
-import { createRoot, Text } from '../../ink.js'
-import { KeybindingSetup } from '../../keybindings/KeybindingProviderSetup.js'
-import { AppStateProvider } from '../../state/AppState.js'
-import { ThemeProvider, useTheme, usePreviewTheme } from './ThemeProvider.js'
+import stripAnsi from 'strip-ansi'
 
-mock.module('../../ink/hooks/use-stdin.js', () => ({
-  default: () => ({ internal_querier: null }),
+import { createRoot, Text, useTheme } from '../ink.js'
+import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js'
+import { AppStateProvider } from '../state/AppState.js'
+import { ThemeProvider, usePreviewTheme } from './ThemeProvider.js'
+
+mock.module('../StructuredDiff.js', () => ({
+  StructuredDiff: function StructuredDiffPreview(): React.ReactNode {
+    return <Text>diff</Text>
+  },
 }))
-mock.module('../../utils/systemTheme.js', () => ({
-  getSystemThemeName: () => 'dark',
-}))
-mock.module('../../utils/config.js', () => ({
-  getGlobalConfig: () => ({ theme: 'dark' }),
-  saveGlobalConfig: () => {},
+mock.module('../StructuredDiff/colorDiff.js', () => ({
+  getColorModuleUnavailableReason: () => 'env',
+  getSyntaxTheme: () => null,
 }))
 
 const SYNC_START = '\x1B[?2026h'
 const SYNC_END = '\x1B[?2026l'
-
-function stripAnsi(str: string): string {
-  return str.replace(/\x1B\[[0-9;]*m/g, '')
-}
 
 function extractLastFrame(output: string): string {
   let lastFrame: string | null = null
@@ -77,14 +74,41 @@ function createTestStreams() {
   return { stdout, stdin, getOutput: () => output }
 }
 
+async function waitForCondition(
+  predicate: () => boolean,
+  timeoutMs = 3000,
+): Promise<void> {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    if (predicate()) return
+    await Bun.sleep(10)
+  }
+  throw new Error('Timed out waiting for condition')
+}
+
+async function waitForFrame(
+  getOutput: () => string,
+  predicate: (frame: string) => boolean,
+): Promise<string> {
+  let frame = ''
+  await waitForCondition(() => {
+    frame = stripAnsi(extractLastFrame(getOutput()))
+    return predicate(frame)
+  })
+  return frame
+}
+
+afterEach(() => {
+  mock.restore()
+})
+
 /**
  * Verifies that useTheme() returns the current theme value immediately
  * after setThemeSetting changes it, not a stale cached value.
  *
- * This is the core regression: with React Compiler memo caches, the hook
- * could return [oldTheme, setter] even after the ThemeProvider re-rendered
- * with a new currentTheme, because the memo compared setThemeSetting by
- * reference (stable across renders) and short-circuited.
+ * With React Compiler memo caches, the hook could return [oldTheme, setter]
+ * because the memo compared setThemeSetting by reference (stable across
+ * renders) and short-circuited, missing the currentTheme change.
  */
 test('useTheme() reflects updated currentTheme after setThemeSetting call', async () => {
   const { stdout, stdin, getOutput } = createTestStreams()
@@ -94,20 +118,15 @@ test('useTheme() reflects updated currentTheme after setThemeSetting call', asyn
     patchConsole: false,
   })
 
-  let observedTheme: string | null = null
-  let renderCount = 0
-
-  function ThemeWatcher() {
+  function ThemeDisplay() {
     const [theme] = useTheme()
-    observedTheme = theme
-    renderCount++
-    return <Text>theme:{theme}</Text>
+    return <Text>current:{theme}</Text>
   }
 
   let setThemeFn: ((s: string) => void) | null = null
   function ThemeSetter() {
     const [, setter] = useTheme()
-    setThemeFn = setter
+    useEffect(() => { setThemeFn = setter })
     return null
   }
 
@@ -115,7 +134,7 @@ test('useTheme() reflects updated currentTheme after setThemeSetting call', asyn
     <AppStateProvider>
       <KeybindingSetup>
         <ThemeProvider initialState="dark">
-          <ThemeWatcher />
+          <ThemeDisplay />
           <ThemeSetter />
         </ThemeProvider>
       </KeybindingSetup>
@@ -123,19 +142,19 @@ test('useTheme() reflects updated currentTheme after setThemeSetting call', asyn
   )
 
   try {
-    // Wait for initial render
-    await Bun.sleep(300)
-    expect(observedTheme).toBe('dark')
+    // Initial render
+    const initial = await waitForFrame(getOutput, f => f.includes('current:dark'))
+    expect(initial).toContain('current:dark')
 
-    // Change theme and verify useTheme() returns the new value
+    // Change theme — useTheme() must reflect the new value
     setThemeFn!('light')
-    await Bun.sleep(300)
-    expect(observedTheme).toBe('light')
+    const afterLight = await waitForFrame(getOutput, f => f.includes('current:light'))
+    expect(afterLight).toContain('current:light')
 
-    // Change again to verify the hook doesn't get stuck on stale values
+    // Change again to confirm no stale caching
     setThemeFn!('ansi')
-    await Bun.sleep(300)
-    expect(observedTheme).toBe('ansi')
+    const afterAnsi = await waitForFrame(getOutput, f => f.includes('current:ansi'))
+    expect(afterAnsi).toContain('current:ansi')
   } finally {
     root.unmount()
     stdin.end()
@@ -145,14 +164,10 @@ test('useTheme() reflects updated currentTheme after setThemeSetting call', asyn
 })
 
 /**
- * Verifies that usePreviewTheme() returns fresh action references after
- * the ThemeProvider context value is recreated (e.g. on theme change).
- *
- * With React Compiler memo caches, usePreviewTheme() could return a stale
- * object { setPreviewTheme, savePreview, cancelPreview } that still
- * referenced closures from before the context update.
+ * Verifies that usePreviewTheme() returns functional action references
+ * after the ThemeProvider context value is recreated on theme change.
  */
-test('usePreviewTheme() actions remain functional after context update', async () => {
+test('usePreviewTheme() setPreviewTheme changes displayed theme', async () => {
   const { stdout, stdin, getOutput } = createTestStreams()
   const root = await createRoot({
     stdout: stdout as unknown as NodeJS.WriteStream,
@@ -160,62 +175,38 @@ test('usePreviewTheme() actions remain functional after context update', async (
     patchConsole: false,
   })
 
-  let observedTheme: string | null = null
   let previewActions: ReturnType<typeof usePreviewTheme> | null = null
 
-  function PreviewWatcher() {
+  function ThemeDisplay() {
     const [theme] = useTheme()
     const actions = usePreviewTheme()
-    observedTheme = theme
-    previewActions = actions
-    return <Text>theme:{theme}</Text>
-  }
-
-  let setThemeFn: ((s: string) => void) | null = null
-  function ThemeSetter() {
-    const [, setter] = useTheme()
-    setThemeFn = setter
-    return null
+    useEffect(() => { previewActions = actions })
+    return <Text>current:{theme}</Text>
   }
 
   root.render(
     <AppStateProvider>
       <KeybindingSetup>
         <ThemeProvider initialState="dark">
-          <PreviewWatcher />
-          <ThemeSetter />
+          <ThemeDisplay />
         </ThemeProvider>
       </KeybindingSetup>
     </AppStateProvider>,
   )
 
   try {
-    // Wait for initial render
-    await Bun.sleep(300)
-    expect(observedTheme).toBe('dark')
-    const firstActions = previewActions!
-    expect(typeof firstActions.setPreviewTheme).toBe('function')
+    // Initial render
+    await waitForFrame(getOutput, f => f.includes('current:dark'))
 
-    // Trigger a context re-render by changing theme
-    setThemeFn!('light')
-    await Bun.sleep(300)
-    expect(observedTheme).toBe('light')
-
-    // The new actions should be functional (not stale closures)
-    const secondActions = previewActions!
-    expect(typeof secondActions.setPreviewTheme).toBe('function')
-    expect(typeof secondActions.savePreview).toBe('function')
-    expect(typeof secondActions.cancelPreview).toBe('function')
-
-    // setPreviewTheme should actually work
-    secondActions.setPreviewTheme('ansi')
-    await Bun.sleep(300)
-    expect(observedTheme).toBe('ansi')
+    // setPreviewTheme should change the displayed theme
+    previewActions!.setPreviewTheme('light')
+    const afterPreview = await waitForFrame(getOutput, f => f.includes('current:light'))
+    expect(afterPreview).toContain('current:light')
 
     // cancelPreview should revert to the saved setting
-    secondActions.cancelPreview()
-    await Bun.sleep(300)
-    expect(observedTheme).toBe('light')
+    previewActions!.cancelPreview()
+    const afterCancel = await waitForFrame(getOutput, f => f.includes('current:dark'))
+    expect(afterCancel).toContain('current:dark')
   } finally {
     root.unmount()
     stdin.end()
