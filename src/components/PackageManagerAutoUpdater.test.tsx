@@ -103,7 +103,7 @@ test('reports update_available with the resolved package manager command', async
       version: '0.2.0',
       currentVersion: expect.any(String),
       status: 'update_available',
-      actionLabel: 'brew upgrade --cask openclaude',
+      actionLabel: 'brew upgrade (see Homebrew for the OpenClaude formula/cask name)',
     })
   } finally {
     root.unmount()

@@ -26,14 +26,14 @@ type Props = {
   verbose: boolean
 }
 
-function getPackageManagerUpdateCommand(packageManager: PackageManager): string {
+function getPackageManagerUpdateHint(packageManager: PackageManager): string {
   switch (packageManager) {
     case 'homebrew':
-      return 'brew upgrade --cask openclaude'
+      return 'brew upgrade (see Homebrew for the OpenClaude formula/cask name)'
     case 'winget':
-      return 'winget upgrade OpenClaude'
+      return 'winget upgrade (see winget for the OpenClaude package name)'
     case 'apk':
-      return 'apk upgrade openclaude'
+      return 'apk upgrade (see apk for the OpenClaude package name)'
     default:
       return 'Use your package manager to update OpenClaude'
   }
@@ -92,7 +92,7 @@ export function PackageManagerAutoUpdater({
         version: latest,
         currentVersion: MACRO.VERSION,
         status: 'update_available',
-        actionLabel: getPackageManagerUpdateCommand(pm),
+        actionLabel: getPackageManagerUpdateHint(pm),
       })
       return
     }
@@ -116,7 +116,7 @@ export function PackageManagerAutoUpdater({
     return null
   }
 
-  const updateCommand = getPackageManagerUpdateCommand(packageManager)
+  const updateHint = getPackageManagerUpdateHint(packageManager)
 
   return (
     <>
@@ -127,8 +127,8 @@ export function PackageManagerAutoUpdater({
       )}
       <Text color="warning" wrap="truncate">
         Update available{' '}
-        {`: ${MACRO.VERSION} → ${autoUpdaterResult?.version ?? 'newer version available'}`} Run:{' '}
-        <Text bold>{updateCommand}</Text>
+        {`: ${MACRO.VERSION} → ${autoUpdaterResult?.version ?? 'newer version available'}`} ·{' '}
+        <Text bold>{updateHint}</Text>
       </Text>
     </>
   )
