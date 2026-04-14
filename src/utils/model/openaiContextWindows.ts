@@ -144,6 +144,21 @@ const OPENAI_CONTEXT_WINDOWS: Record<string, number> = {
   'llama3.2:1b':              128_000,
   'qwen3:8b':                 128_000,
   'codestral':                 32_768,
+
+  // Alibaba DashScope (Coding Plan)
+  // Model context windows from DashScope API /models endpoint (April 2026).
+  // Values sourced from: qwen3.5-plus/qwen3-coder-plus (1M), qwen3-coder-next/max (256K),
+  // kimi-k2.5 (256K), MiniMax-M2.5 (192K), glm-5/glm-4.7 (198K).
+  // Max output tokens: Qwen variants (64K/32K), MiniMax (24K), GLM (16K).
+  'qwen3.6-plus':           1_000_000,
+  'qwen3.5-plus':           1_000_000,
+  'qwen3-coder-plus':       1_000_000,
+  'qwen3-coder-next':         262_144,
+  'qwen3-max':                262_144,
+  'qwen3-max-2026-01-23':     262_144,
+  'kimi-k2.5':                262_144,
+  'glm-5':                    202_752,
+  'glm-4.7':                  202_752,
 }
 
 /**
@@ -271,6 +286,17 @@ const OPENAI_MAX_OUTPUT_TOKENS: Record<string, number> = {
   'llama3.2:1b':                4_096,
   'qwen3:8b':                   8_192,
   'codestral':                   8_192,
+
+  // Alibaba DashScope (Coding Plan)
+  'qwen3.6-plus':              65_536,
+  'qwen3.5-plus':              65_536,
+  'qwen3-coder-plus':          65_536,
+  'qwen3-coder-next':          65_536,
+  'qwen3-max':                 32_768,
+  'qwen3-max-2026-01-23':      32_768,
+  'kimi-k2.5':                 32_768,
+  'glm-5':                     16_384,
+  'glm-4.7':                   16_384,
 }
 
 function lookupByModel<T>(table: Record<string, T>, model: string): T | undefined {
